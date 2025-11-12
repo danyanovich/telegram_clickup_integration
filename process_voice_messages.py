@@ -101,79 +101,84 @@ def get_recent_voice_messages(
     """
     url = f"https://api.telegram.org/bot{bot_token}/getUpdates"
 
-    params: Dict[str, Any] = {'limit': 100}
-    if last_update_id is not None:
-        params['offset'] = last_update_id + 1
-
-    # Получаем обновления
-    response = requests.get(url, params=params, timeout=30)
-    response.raise_for_status()
-    data = response.json()
-
-    if not data.get('ok'):
-        raise Exception(f"Telegram API error: {data}")
-
-    # Фильтруем голосовые и аудио сообщения из нужного чата за последний час
+    limit = 100
     cutoff_time = datetime.now() - timedelta(hours=hours_back)
-    voice_messages = []
+    voice_messages: List[Dict[str, Any]] = []
     max_update_id = last_update_id
+    chat_id_int = int(chat_id)
+    offset = last_update_id + 1 if last_update_id is not None else None
 
-    for update in data.get('result', []):
-        update_id = update.get('update_id')
-        if update_id is not None:
-            max_update_id = update_id if max_update_id is None else max(max_update_id, update_id)
+    while True:
+        params: Dict[str, Any] = {'limit': limit}
+        if offset is not None:
+            params['offset'] = offset
 
-        # Проверяем как обычные сообщения, так и channel_post
-        message = update.get('message') or update.get('channel_post') or update.get('edited_message')
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
 
-        if not message:
-            continue
+        if not data.get('ok'):
+            raise Exception(f"Telegram API error: {data}")
 
-        # Проверяем, что сообщение из нужного чата
-        chat_id_int = int(chat_id)
-        message_chat_id = message.get('chat', {}).get('id')
+        updates = data.get('result', [])
 
-        if message_chat_id != chat_id_int:
-            continue
+        for update in updates:
+            update_id = update.get('update_id')
+            if update_id is not None:
+                max_update_id = update_id if max_update_id is None else max(max_update_id, update_id)
 
-        msg_time = datetime.fromtimestamp(message['date'])
-        if msg_time <= cutoff_time:
-            continue
+            message = update.get('message') or update.get('channel_post') or update.get('edited_message')
+            if not message:
+                continue
 
-        # Определяем отправителя
-        from_user = 'Unknown'
-        if 'from' in message:
-            from_user = message['from'].get('first_name', 'Unknown')
-        elif 'forward_from' in message:
-            from_user = message['forward_from'].get('first_name', 'Unknown')
-        elif 'forward_origin' in message:
-            origin = message['forward_origin']
-            if origin.get('type') == 'user' and 'sender_user' in origin:
-                from_user = origin['sender_user'].get('first_name', 'Unknown')
-        elif 'sender_chat' in message:
-            from_user = message['sender_chat'].get('title', 'Channel')
-        
-        # Проверяем наличие голосового или аудио
-        audio_data = None
-        audio_type = None
-        
-        if 'voice' in message:
-            audio_data = message['voice']
-            audio_type = 'voice'
-        elif 'audio' in message:
-            audio_data = message['audio']
-            audio_type = 'audio'
-        
-        if audio_data:
-            voice_messages.append({
-                'file_id': audio_data['file_id'],
-                'duration': audio_data.get('duration', 0),
-                'date': msg_time.isoformat(),
-                'from_user': from_user,
-                'type': audio_type,
-                'mime_type': audio_data.get('mime_type', 'unknown'),
-                'is_forwarded': 'forward_from' in message or 'forward_origin' in message
-            })
+            message_chat_id = message.get('chat', {}).get('id')
+            if message_chat_id != chat_id_int:
+                continue
+
+            msg_time = datetime.fromtimestamp(message['date'])
+            if msg_time <= cutoff_time:
+                continue
+
+            from_user = 'Unknown'
+            if 'from' in message:
+                from_user = message['from'].get('first_name', 'Unknown')
+            elif 'forward_from' in message:
+                from_user = message['forward_from'].get('first_name', 'Unknown')
+            elif 'forward_origin' in message:
+                origin = message['forward_origin']
+                if origin.get('type') == 'user' and 'sender_user' in origin:
+                    from_user = origin['sender_user'].get('first_name', 'Unknown')
+            elif 'sender_chat' in message:
+                from_user = message['sender_chat'].get('title', 'Channel')
+
+            audio_data = None
+            audio_type = None
+
+            if 'voice' in message:
+                audio_data = message['voice']
+                audio_type = 'voice'
+            elif 'audio' in message:
+                audio_data = message['audio']
+                audio_type = 'audio'
+
+            if audio_data:
+                voice_messages.append({
+                    'file_id': audio_data['file_id'],
+                    'duration': audio_data.get('duration', 0),
+                    'date': msg_time.isoformat(),
+                    'from_user': from_user,
+                    'type': audio_type,
+                    'mime_type': audio_data.get('mime_type', 'unknown'),
+                    'is_forwarded': 'forward_from' in message or 'forward_origin' in message
+                })
+
+        if not updates or len(updates) < limit:
+            break
+
+        if max_update_id is None:
+            break
+
+        offset = max_update_id + 1
 
     return voice_messages, max_update_id
 
