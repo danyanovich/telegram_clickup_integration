@@ -116,3 +116,4 @@ cat /home/ubuntu/telegram_clickup_integration/logs/processing_log_*.md
 1. Проверьте логи: `cat /home/ubuntu/telegram_clickup_integration/logs/processing_log_*.md`
 2. Проверьте JSON файл: `cat /home/ubuntu/telegram_clickup_integration/tasks_to_create_*.json`
 3. Запустите скрипт с выводом ошибок: `python3 process_voice_messages.py 2>&1 | tee test_output.log`
+4. Если в консоли появилась ошибка вида «Не удалось преобразовать ответ модели в JSON несмотря на требуемый формат», «GPT не вернул текст с задачами при извлечении» или «GPT вернул ответ без текстового содержимого для задач», повторите запуск запроса. Эти сообщения означают, что модель не прислала структуру, соответствующую JSON-схеме, и повторный запуск обычно решает проблему.

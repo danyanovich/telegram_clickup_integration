@@ -253,35 +253,61 @@ def extract_tasks_from_text(text, api_key):
 {text}
 """
     
-    response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "Ты помощник для извлечения задач из текста. Отвечай только валидным JSON."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.3
+    response = client.responses.create(
+        model="gpt-4.1-mini",
+        input=prompt,
+        temperature=0.3,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "extracted_tasks",
+                "schema": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "description": {"type": "string"},
+                            "due_date": {"type": ["string", "null"]},
+                            "priority": {
+                                "type": ["integer", "null"],
+                                "minimum": 1,
+                                "maximum": 4
+                            },
+                            "assignee": {"type": ["string", "null"]}
+                        },
+                        "required": ["name", "description", "due_date", "priority", "assignee"],
+                        "additionalProperties": False
+                    }
+                }
+            }
+        }
     )
-    
-    # Парсим JSON ответ
-    choices = getattr(response, "choices", [])
-    if not choices:
-        raise ValueError("GPT не вернул ни одного варианта ответа при извлечении задач")
 
-    message_content = choices[0].message.content if choices[0].message else None
-    if not message_content:
-        raise ValueError("GPT вернул пустой ответ при извлечении задач")
+    # Парсим JSON ответ согласно новому SDK
+    parsed_output = getattr(response, "parsed", None)
+    if parsed_output is not None:
+        tasks = parsed_output
+    else:
+        output_items = getattr(response, "output", []) or []
+        if not output_items or not getattr(output_items[0], "content", None):
+            raise ValueError("GPT не вернул текст с задачами при извлечении")
 
-    tasks_json = message_content.strip()
-    # Убираем markdown форматирование если есть
-    if tasks_json.startswith("```json"):
-        tasks_json = tasks_json.split("```json")[1].split("```")[0].strip()
-    elif tasks_json.startswith("```"):
-        tasks_json = tasks_json.split("```")[1].split("```")[0].strip()
-    
-    try:
-        tasks = json.loads(tasks_json)
-    except json.JSONDecodeError as json_err:
-        raise ValueError(f"Не удалось распарсить ответ GPT как JSON: {json_err}") from json_err
+        content_blocks = output_items[0].content
+        text_blocks = [block for block in content_blocks if getattr(block, "type", "") == "output_text"]
+        if not text_blocks:
+            raise ValueError("GPT вернул ответ без текстового содержимого для задач")
+
+        tasks_json = getattr(text_blocks[0], "text", "").strip()
+        if not tasks_json:
+            raise ValueError("GPT вернул пустой текст при извлечении задач")
+
+        try:
+            tasks = json.loads(tasks_json)
+        except json.JSONDecodeError as json_err:
+            raise ValueError(
+                "Не удалось преобразовать ответ модели в JSON несмотря на требуемый формат"
+            ) from json_err
 
     if not isinstance(tasks, list):
         raise ValueError("Ответ GPT должен быть списком задач")
