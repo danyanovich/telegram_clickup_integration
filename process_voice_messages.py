@@ -6,6 +6,7 @@
 import os
 import json
 import requests
+from requests.exceptions import RequestException
 from datetime import datetime, timedelta
 import tempfile
 from pathlib import Path
@@ -188,23 +189,31 @@ def download_audio_file(bot_token, file_id, output_path):
     """
     # Получаем путь к файлу
     url = f"https://api.telegram.org/bot{bot_token}/getFile"
-    response = requests.get(url, params={'file_id': file_id})
-    response.raise_for_status()
-    data = response.json()
-    
+    try:
+        response = requests.get(url, params={'file_id': file_id}, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+    except RequestException as exc:
+        raise RuntimeError(f"Failed to get Telegram file metadata: {exc}") from exc
+
     if not data.get('ok'):
         raise Exception(f"Failed to get file path: {data}")
-    
+
     file_path = data['result']['file_path']
-    
+
     # Скачиваем файл
     download_url = f"https://api.telegram.org/file/bot{bot_token}/{file_path}"
-    response = requests.get(download_url)
-    response.raise_for_status()
-    
-    with open(output_path, 'wb') as f:
-        f.write(response.content)
-    
+    try:
+        with requests.get(download_url, stream=True, timeout=60) as response:
+            response.raise_for_status()
+
+            with open(output_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+    except RequestException as exc:
+        raise RuntimeError(f"Failed to download Telegram file: {exc}") from exc
+
     return output_path
 
 def transcribe_audio(audio_path, api_key):
