@@ -3,8 +3,10 @@
 Скрипт для обработки голосовых сообщений из Telegram и создания задач в ClickUp
 """
 
+import logging
 import os
 import json
+import re
 import requests
 from requests.exceptions import RequestException
 from datetime import datetime, timedelta
@@ -16,6 +18,128 @@ from clickup_client import build_clickup_payload, create_clickup_task
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 STATE_FILE = PROJECT_ROOT / "state.json"
+
+
+ASSIGNEE_SPLIT_RE = re.compile(r"[;,/]|\\b(?:и|and|&|и/или)\\b", re.IGNORECASE)
+
+
+def _normalize_name(name: str) -> str:
+    return " ".join(name.strip().lower().split())
+
+
+def prepare_assignee_map(raw_map: Any) -> Dict[str, List[int]]:
+    if not isinstance(raw_map, dict):
+        return {}
+
+    prepared: Dict[str, List[int]] = {}
+    for raw_key, raw_value in raw_map.items():
+        if not isinstance(raw_key, str):
+            continue
+
+        normalized_key = _normalize_name(raw_key)
+        if not normalized_key:
+            continue
+
+        values = raw_value if isinstance(raw_value, list) else [raw_value]
+        assignee_ids: List[int] = []
+        for item in values:
+            if item is None:
+                continue
+            try:
+                assignee_ids.append(int(item))
+            except (TypeError, ValueError):
+                continue
+
+        if assignee_ids:
+            prepared[normalized_key] = assignee_ids
+
+    return prepared
+
+
+def resolve_assignee_ids(assignee_value: Any, assignee_map: Dict[str, List[int]]) -> List[int]:
+    if not assignee_value or not assignee_map:
+        return []
+
+    candidates: List[str] = []
+    if isinstance(assignee_value, str):
+        candidates.append(assignee_value)
+        candidates.extend(filter(None, (part.strip() for part in ASSIGNEE_SPLIT_RE.split(assignee_value))))
+    elif isinstance(assignee_value, list):
+        for value in assignee_value:
+            if isinstance(value, str):
+                candidates.append(value)
+
+    resolved: List[int] = []
+    for candidate in candidates:
+        normalized = _normalize_name(candidate)
+        if not normalized:
+            continue
+        ids = assignee_map.get(normalized)
+        if not ids:
+            continue
+        for member_id in ids:
+            if member_id not in resolved:
+                resolved.append(member_id)
+
+    return resolved
+
+
+def fetch_clickup_member_map(token: str, list_id: str) -> Dict[str, List[int]]:
+    if not token or not list_id:
+        return {}
+
+    url = f"https://api.clickup.com/api/v2/list/{list_id}"
+    headers = {"Authorization": token}
+
+    try:
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+    except RequestException as exc:
+        logging.warning("Не удалось загрузить участников списка ClickUp: %s", exc)
+        return {}
+
+    data = response.json()
+    members = data.get("members") or []
+    if not isinstance(members, list):
+        return {}
+
+    member_map: Dict[str, List[int]] = {}
+    for member in members:
+        user = member.get("user") if isinstance(member, dict) else None
+        if not isinstance(user, dict):
+            continue
+
+        raw_id = user.get("id")
+        try:
+            member_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+
+        name_candidates = {
+            user.get("username"),
+            user.get("email"),
+            user.get("color"),
+            user.get("initials"),
+        }
+
+        profile = user.get("profile") if isinstance(user.get("profile"), dict) else {}
+        name_candidates.update(
+            {
+                profile.get("first_name"),
+                profile.get("last_name"),
+                profile.get("full_name"),
+            }
+        )
+
+        for candidate in filter(None, name_candidates):
+            normalized = _normalize_name(candidate)
+            if not normalized:
+                continue
+            members_for_key = member_map.setdefault(normalized, [])
+            if member_id not in members_for_key:
+                members_for_key.append(member_id)
+
+    return member_map
 
 
 def load_state() -> Dict[str, Any]:
@@ -216,14 +340,26 @@ def download_audio_file(bot_token, file_id, output_path):
 
     return output_path
 
+_openai_clients: Dict[str, Any] = {}
+
+
+def get_openai_client(api_key: str):
+    if api_key in _openai_clients:
+        return _openai_clients[api_key]
+
+    from openai import OpenAI
+
+    client = OpenAI(api_key=api_key)
+    _openai_clients[api_key] = client
+    return client
+
+
 def transcribe_audio(audio_path, api_key):
     """
     Транскрибирует аудио файл через OpenAI Whisper API
     Возвращает текст транскрипции
     """
-    from openai import OpenAI
-    
-    client = OpenAI(api_key=api_key)
+    client = get_openai_client(api_key)
     
     with open(audio_path, 'rb') as audio_file:
         transcript = client.audio.transcriptions.create(
@@ -239,9 +375,7 @@ def extract_tasks_from_text(text, api_key):
     Использует GPT для извлечения задач из транскрипции
     Возвращает список задач с полями: название, описание, дедлайн, приоритет, ответственный
     """
-    from openai import OpenAI
-    
-    client = OpenAI(api_key=api_key)
+    client = get_openai_client(api_key)
     
     prompt = f"""
 Проанализируй следующий текст из голосового сообщения и извлеки все упомянутые задачи.
@@ -415,6 +549,11 @@ def main():
         raise Exception("В config.json отсутствует clickup_list_id")
 
     default_priority = config.get('default_priority', 3)
+
+    clickup_member_map = fetch_clickup_member_map(clickup_token, clickup_list_id)
+    config_assignee_map = prepare_assignee_map(config.get('assignee_map'))
+    assignee_map = dict(clickup_member_map)
+    assignee_map.update(config_assignee_map)
     
     print(f"Проверка голосовых сообщений в чате {chat_id}...")
     
@@ -429,10 +568,6 @@ def main():
         last_update_id=last_update_id
     )
 
-    if max_update_id is not None and max_update_id != last_update_id:
-        state['last_update_id'] = max_update_id
-        save_state(state)
-    
     print(f"Найдено голосовых сообщений: {len(voice_messages)}")
     
     log_data = {
@@ -490,7 +625,14 @@ def main():
 
             created_for_message = 0
             for task in tasks:
-                payload = build_clickup_payload(task, default_priority=default_priority)
+                assignee_ids = resolve_assignee_ids(task.get('assignee'), assignee_map)
+                if assignee_ids:
+                    task['assignee_ids'] = assignee_ids
+                payload = build_clickup_payload(
+                    task,
+                    default_priority=default_priority,
+                    assignee_ids=assignee_ids,
+                )
                 task_name = payload.get('name', 'Без названия')
 
                 try:
@@ -528,7 +670,11 @@ def main():
                     pass
         
         log_data['voice_messages'].append(vm_log)
-    
+
+    if max_update_id is not None and max_update_id != last_update_id:
+        state['last_update_id'] = max_update_id
+        save_state(state)
+
     # Сохраняем лог
     logs_dir = PROJECT_ROOT / "logs"
     os.makedirs(logs_dir, exist_ok=True)

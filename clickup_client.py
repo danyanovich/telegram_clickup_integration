@@ -5,7 +5,7 @@ import time
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from math import ceil
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -16,7 +16,11 @@ def to_epoch_millis(date_str: str) -> int:
     return int(dt.timestamp() * 1000)
 
 
-def build_clickup_payload(task: Dict[str, Any], default_priority: int = 3) -> Dict[str, Any]:
+def build_clickup_payload(
+    task: Dict[str, Any],
+    default_priority: int = 3,
+    assignee_ids: Optional[List[int]] = None,
+) -> Dict[str, Any]:
     """
     Подготавливает полезную нагрузку для API ClickUp из словаря задачи.
     Некорректные значения дедлайна и приоритета игнорируются.
@@ -41,6 +45,9 @@ def build_clickup_payload(task: Dict[str, Any], default_priority: int = 3) -> Di
         "description": description,
         "priority": priority,
     }
+
+    if assignee_ids:
+        payload["assignees"] = assignee_ids
 
     due_date_str = task.get("due_date")
     if due_date_str and isinstance(due_date_str, str):

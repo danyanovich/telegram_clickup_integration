@@ -46,7 +46,10 @@ def main():
     for vm in data.get("voice_messages", []):
         tasks = vm.get("tasks", [])
         for task in tasks:
-            payload = build_clickup_payload(task)
+            payload = build_clickup_payload(
+                task,
+                assignee_ids=task.get("assignee_ids"),
+            )
             name = payload.get("name") or "Без названия"
 
             # Примечание: сопоставления исполнителя по имени нет — пропускаем assignees
