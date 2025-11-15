@@ -1,0 +1,19 @@
+[project]
+name = "telegram-clickup-integration"
+version = "0.1.0"
+description = "Automation that converts Telegram voice notes into ClickUp tasks"
+requires-python = ">=3.9"
+authors = [{ name = "Automation" }]
+dependencies = [
+    "openai==1.51.0",
+    "requests==2.32.3",
+    "dateparser==1.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+]
+
+[tool.setuptools]
+packages = []

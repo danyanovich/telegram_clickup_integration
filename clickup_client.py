@@ -11,8 +11,30 @@ import requests
 
 
 def to_epoch_millis(date_str: str) -> int:
-    """Преобразует дату YYYY-MM-DD в миллисекунды Unix времени (UTC)."""
-    dt = datetime.strptime(date_str, "%Y-%m-%d")
+    """Преобразует ISO-дату или YYYY-MM-DD в миллисекунды Unix времени (UTC)."""
+
+    if not isinstance(date_str, str):
+        raise ValueError("Дата должна быть строкой")
+
+    value = date_str.strip()
+
+    if not value:
+        raise ValueError("Строка даты пуста")
+
+    try:
+        dt = datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+        try:
+            dt = datetime.fromisoformat(normalized)
+        except ValueError as exc:
+            raise ValueError(f"Unsupported date format: {date_str}") from exc
+
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc)
+    else:
+        dt = dt.replace(tzinfo=timezone.utc)
+
     return int(dt.timestamp() * 1000)
 
 
@@ -132,3 +154,40 @@ def create_clickup_task(token: str, list_id: str, payload: Dict[str, Any]) -> Di
     # Если ни одна попытка не увенчалась успехом, поднимем исключение
     response.raise_for_status()
     return {}
+
+
+def create_clickup_reminder(
+    token: str,
+    team_id: str,
+    task_id: str,
+    remind_time_ms: int,
+    assignee_id: Optional[int] = None,
+) -> None:
+    """Создает напоминание в ClickUp перед дедлайном."""
+
+    if not team_id or not task_id:
+        return
+
+    url = f"https://api.clickup.com/api/v2/team/{team_id}/reminder"
+    headers = {
+        "Authorization": token,
+        "Content-Type": "application/json",
+    }
+    body: Dict[str, Any] = {
+        "task_id": task_id,
+        "remind_time": remind_time_ms,
+        "notify_all": assignee_id is None,
+    }
+    if assignee_id is not None:
+        body["assignee"] = assignee_id
+
+    response = requests.post(url, headers=headers, json=body, timeout=30)
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as exc:  # pragma: no cover - сеть/лимиты
+        logging.warning(
+            "Не удалось создать напоминание ClickUp для задачи %s: %s / %s",
+            task_id,
+            response.status_code,
+            exc,
+        )

@@ -10,8 +10,11 @@ Automation that scans a Telegram group for new voice/audio messages, transcribes
 
 - Install deps
   ```bash
-  pip install -r requirements.txt
+  python3 -m venv .venv
+  source .venv/bin/activate
+  pip install -r requirements.lock
   ```
+  > При обновлении зависимостей редактируйте `requirements.in` и запускайте `pip-compile --output-file=requirements.lock requirements.in`.
 
 - Run the hourly processor once (manual run)
   ```bash
@@ -40,7 +43,22 @@ Notes:
   {
     "clickup_list_id": "901515871754",
     "telegram_check_hours": 1,
-    "default_priority": 3
+    "default_priority": 3,
+    "log_retention_days": 30,
+    "tasks_retention_days": 30,
+    "store_transcriptions": true,
+    "transcription_max_chars": 4000,
+    "timezone": "Europe/Moscow",
+    "clickup_member_cache_hours": 6,
+    "download_max_workers": 3,
+    "openai_max_workers": 3,
+    "openai_max_attempts": 3,
+    "create_clickup_reminders": true,
+    "reminder_offset_hours": 2,
+    "send_summary_to_telegram": true,
+    "summary_chat_id": "",
+    "assignee_map": {},
+    "assignee_aliases": {}
   }
   ```
 
