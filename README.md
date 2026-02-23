@@ -1,227 +1,153 @@
-# Автоматизация: Telegram Voice/Audio → ClickUp Tasks
+<div align="center">
+  <img src="https://img.icons8.com/color/96/000000/telegram-app.png" alt="Telegram Logo" width="60" />
+  <img src="https://img.icons8.com/fluency/96/000000/arrow.png" alt="Arrow" width="40" />
+  <img src="https://img.icons8.com/color/96/000000/clickup.png" alt="ClickUp Logo" width="60" />
 
-## 📋 Описание
+  # Telegram → ClickUp AI Integration
 
-Автоматическая система обработки голосовых и аудио сообщений из Telegram группы и создания задач в ClickUp.
+  **Automate your task creation with Voice. Speak your ideas in Telegram, get structured tasks in ClickUp.**
 
-### Как это работает:
+  [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/release/python-390/)
+  [![OpenAI Whisper & GPT-4](https://img.shields.io/badge/AI-OpenAI-green.svg)](https://openai.com/)
+  [![ClickUp API](https://img.shields.io/badge/API-ClickUp-7B68EE.svg)](https://clickup.com/api)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#)
 
-1. **Каждый час** система проверяет новые голосовые и аудио сообщения в вашей Telegram группе
-2. **Транскрибирует** их через OpenAI Whisper API
-3. **Анализирует** текст через GPT-4 для извлечения задач
-4. **Создает** отдельные задачи в ClickUp с параметрами:
- - Название задачи
-  - Подробное описание
-  - Дедлайн (если упомянут, поддерживаются форматы `YYYY-MM-DD` и полный ISO 8601 `2025-01-05T12:30:00+03:00`)
-  - Приоритет (1-4)
-  - Ответственный (если упомянут)
+</div>
 
-### Поддерживаемые форматы:
+---
 
-✅ **Обычные голосовые сообщения** (`voice`)  
-✅ **Пересланные голосовые сообщения** (`forward_from` с `voice`)  
-✅ **Аудио файлы** (`audio`) - MP3, OGG, M4A, WAV  
-✅ **Сообщения из каналов** (`channel_post`)  
-✅ **Пересланные аудио из других чатов**
+## ✨ Overview
 
-## ✅ Что уже настроено:
+Stop typing out lengthy task descriptions. This integration seamlessly connects your **Telegram** group to your **ClickUp** workspace using **OpenAI's** advanced AI models. Just send a voice message, and the system will transcribe it, extract action items, and create perfectly formatted tasks with deadlines, priorities, and assignees.
 
-- ✅ **ClickUp REST API** — прямое подключение по токену для создания задач
-- ✅ **Telegram Bot API** - настроены секреты (BOT_TOKEN и CHAT_ID)
-- ✅ **OpenAI API** - настроен ключ для Whisper и GPT-4
-- ✅ **Автоматизированная задача** - запускается каждый час
-- ✅ **ID списка ClickUp** - `901515871754`
+### 🚀 Key Features
 
-## 📁 Структура файлов:
+- 🎙️ **Universal Audio Support** — Works with voice notes (`.ogg`), audio files (`.mp3`, `.m4a`, `.wav`), and forwarded messages.
+- 🧠 **Smart AI Extraction** — Powered by OpenAI *Whisper* for flawless transcription and *GPT-4* for extracting structured data.
+- 📅 **Intelligent Deadlines** — Understands relative dates like *"tomorrow at 3 PM"* or *"next Friday"*.
+- 🔔 **ClickUp Reminders** — Automatically creates native ClickUp reminders before the deadline hits.
+- 🛡️ **Fail-safe Architecture** — Robust error handling, rate-limit backoffs (429), and atomic state saving to ensure no message is ever lost.
 
+---
+
+## 🏗️ How It Works
+
+```mermaid
+sequenceDiagram
+    participant User as 👤 You
+    participant TG as ✈️ Telegram Group
+    participant App as 🤖 AI Processor
+    participant OAI as 🧠 OpenAI (Whisper + GPT-4)
+    participant CU as 🎯 ClickUp
+
+    User->>TG: Sends Voice Message
+    loop Every Hour
+        App->>TG: Fetches new updates
+        TG-->>App: Audio Files
+        App->>OAI: Audio for Transcription (Whisper)
+        OAI-->>App: Text Transcript
+        App->>OAI: Text for parsing (GPT-4)
+        OAI-->>App: JSON Tasks (Name, Desc, Due Date, Assignee)
+        App->>CU: Create Tasks via API
+        CU-->>App: Task IDs
+    end
+    App->>TG: Sends Summary Report (Optional)
 ```
-/home/ubuntu/telegram_clickup_integration/
-├── process_voice_messages.py    # Основной скрипт: от Telegram до ClickUp
-├── create_clickup_tasks.py      # Ручное повторное создание задач из последнего JSON
-├── clickup_client.py            # Общие функции работы с ClickUp API
-├── config.json                  # Конфигурация (ID списка ClickUp, приоритеты)
-├── requirements.in              # Верхнеуровневые зависимости
-├── requirements.lock            # Зафиксированные версии (pip-compile)
-├── logs/                        # Отчеты о выполнении
-└── state.json                   # Технический файл (создается после первого запуска): последний обработанный update_id Telegram
-```
 
-## 🔧 Конфигурация:
+---
 
-Перед первым запуском установите зависимости:
+## 🛠️ Quick Start
+
+### 1. Prerequisites
+- Python 3.9 or higher.
+- A Telegram Bot Token & Group Chat ID (Add the bot to your group and make it **Admin**).
+- An OpenAI API Key.
+- A ClickUp Personal Token and a List ID.
+
+### 2. Installation
+Clone the repository and install the locked dependencies:
+
 ```bash
+git clone https://github.com/viorabuild/telegram_clickup_integration.git
+cd telegram_clickup_integration
 pip install -r requirements.lock
 ```
 
-> Зависимости управляются через [pip-tools](https://github.com/jazzband/pip-tools). Чтобы обновить версии, отредактируйте `requirements.in` и выполните `pip-compile --output-file=requirements.lock requirements.in`, затем снова установите зависимости из lock-файла.
+### 3. Secrets Registration
+Create a `api_secrets.json` file in `~/.api_secret_infos/` or set the following environment variables:
+```bash
+export TELEGRAM_BOT_TOKEN="your_bot_token"
+export TELEGRAM_CHAT_ID="-1234567890"
+export OPENAI_API_KEY="sk-..."
+export CLICKUP_TOKEN="pk_..."
+```
 
-### config.json
+### 4. Configuration
+Edit `config.json` to map your workflow:
 ```json
 {
   "clickup_list_id": "901515871754",
   "telegram_check_hours": 1,
-  "default_priority": 3,
-  "log_retention_days": 30,
-  "tasks_retention_days": 30,
-  "store_transcriptions": true,
-  "transcription_max_chars": 4000,
   "timezone": "Europe/Moscow",
-  "clickup_member_cache_hours": 6,
-  "download_max_workers": 3,
-  "openai_max_workers": 3,
-  "openai_max_attempts": 3,
-  "create_clickup_reminders": true,
-  "reminder_offset_hours": 2,
-  "send_summary_to_telegram": true,
-  "summary_chat_id": "",
-  "assignee_map": {},
-  "assignee_aliases": {}
+  "send_summary_to_telegram": true
 }
 ```
+*(See the [Configuration section](#-configuration-details) for advanced settings like team aliases and retention policies).*
 
-Ключи конфигурации:
-- `log_retention_days` и `tasks_retention_days` задают срок хранения Markdown-логов и файлов `tasks_to_create_*.json`. Значение `0` отключает очистку.
-- `store_transcriptions` управляет тем, сохраняются ли транскрипции в логах/JSON. Установите `false`, чтобы не хранить текст голосовых.
-- `transcription_max_chars` ограничивает длину транскрипции, попадающую в логи; при превышении текст обрезается и помечается как `transcription_truncated`.
-- `timezone` — часовой пояс для интерпретации относительных дедлайнов (даты/фразы вида «завтра»).
-- `clickup_member_cache_hours` — срок хранения локального кэша участников ClickUp. `0` отключает кэш; файл лежит в `.cache/clickup_members.json`.
-- `download_max_workers` — сколько аудио можно скачивать из Telegram параллельно.
-- `openai_max_workers` — число параллельных запросов к Whisper/GPT для ускорения обработки длинных очередей.
-- `openai_max_attempts` — количество повторных попыток при временных сбоях OpenAI (Whisper/GPT). Задайте большее значение, если часто ловите 5xx/сетевые ошибки.
-- `create_clickup_reminders` + `reminder_offset_hours` — включают автоматические напоминания до дедлайна (при наличии `clickup_team_id`).
-- `send_summary_to_telegram` и `summary_chat_id` — отправляют итоговую сводку в Telegram (если `summary_chat_id` пуст, используется `CHAT_ID`).
-- `assignee_map` и `assignee_aliases` — ручное сопоставление исполнителей и их псевдонимов для ClickUp.
-
-### API Секреты (хранятся в `/home/ubuntu/.api_secret_infos/api_secrets.json` или переменных окружения):
-- **TELEGRAM**: BOT_TOKEN, CHAT_ID (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
-- **OPENAI**: API_KEY (`OPENAI_API_KEY`)
-- **CLICKUP**: API_TOKEN или TOKEN (`CLICKUP_TOKEN`)
-
-### Дополнительные переменные окружения
-- `LOG_LEVEL` — уровень логирования (`INFO` по умолчанию). Установите `DEBUG`, чтобы видеть подробные сообщения во время отладки.
-
-## 🚀 Запуск:
-
-### Автоматический запуск (каждый час):
-Система уже настроена и работает автоматически: каждый запуск проверяет чат, обрабатывает новые сообщения, создает задачи в ClickUp и обновляет `state.json`, чтобы не брать уже обработанные события. Следующий запуск будет через час.
-
-### Ручной запуск (для тестирования):
+### 5. Run the Processor
+To manually trigger a sync:
 ```bash
-cd /home/ubuntu/telegram_clickup_integration
-python3 process_voice_messages.py
+./run.sh
 ```
-Для безопасной проверки доступен режим без создания задач и ограничение количества сообщений:
-```bash
-python3 process_voice_messages.py --dry-run --limit 2
-```
-Лимит обрабатывает только указанное количество свежих голосовых сообщений и не помечает остальные как обработанные — они будут взяты при следующем запуске.
-
-Для повторного создания задач из последнего сохраненного JSON можно запустить:
-```bash
-python3 create_clickup_tasks.py
-```
-При необходимости можно указать конкретный файл или запустить в безопасном режиме:
-```bash
-python3 create_clickup_tasks.py --file tasks_to_create_20251001_163201.json
-python3 create_clickup_tasks.py --dry-run --limit 5  # только проверить payload
-python3 create_clickup_tasks.py --force              # пересоздать даже если ID уже сохранены
-```
-
-## 📊 Отчеты:
-
-Все отчеты о выполнении сохраняются в:
-```
-/home/ubuntu/telegram_clickup_integration/logs/
-```
-
-Если включен `send_summary_to_telegram`, после каждого запуска бот отправляет короткую сводку (количество сообщений/задач/ошибок и имя лога) в чат `summary_chat_id` или основной `CHAT_ID`.
-
-После каждого запуска бот отправляет краткую сводку (кол-во сообщений, задач, ошибок и ссылку на лог) в указанный Telegram чат. При необходимости отключите это через `send_summary_to_telegram` или задайте отдельный `summary_chat_id`.
-
-Каждый отчет содержит:
-- Количество обработанных голосовых сообщений
-- Транскрипции голосовых
-- Извлеченные задачи с параметрами
-- ID созданных задач в ClickUp
-- Ошибки (если были)
-- Количество успешных и неуспешных созданий задач в ClickUp
-
-## 🔍 Мониторинг:
-
-Чтобы посмотреть последний отчет:
-```bash
-ls -lt /home/ubuntu/telegram_clickup_integration/logs/ | head -5
-cat /home/ubuntu/telegram_clickup_integration/logs/processing_log_*.md
-```
-
-## 🧪 Автотесты
-
-В репозитории есть юнит- и интеграционные тесты (моки Telegram/OpenAI/ClickUp). Запускаются стандартным `unittest`:
-
-```bash
-python3 -m unittest
-```
-
-Тесты покрывают разбор исполнителей/дедлайнов, кэш ClickUp и полный прогон `run_once` в dry-run режиме.
-
-## ⚙️ Настройка Telegram Bot:
-
-### Если вы еще не создали бота:
-
-1. Откройте Telegram и найдите **@BotFather**
-2. Отправьте команду `/newbot`
-3. Следуйте инструкциям: введите имя бота и username
-4. Скопируйте полученный **BOT_TOKEN**
-5. Добавьте бота в вашу группу
-6. Сделайте бота **администратором** группы (важно!)
-7. Получите **CHAT_ID** группы:
-   - Отправьте любое сообщение в группу
-   - Откройте: `https://api.telegram.org/bot<ВАШ_BOT_TOKEN>/getUpdates`
-   - Найдите `"chat":{"id": -1234567890}` - это CHAT_ID
-
-## 🎯 Формат голосовых сообщений:
-
-Для лучшего распознавания задач, говорите примерно так:
-
-> "Нужно сделать три задачи. Первая - подготовить презентацию для клиента, срочно, до пятницы, ответственный Иван. Вторая - обновить документацию на сайте, нормальный приоритет, до конца недели. Третья - провести встречу с командой, завтра в 15:00, высокий приоритет, ответственная Мария."
-
-Система автоматически извлечет:
-- Названия задач
-- Описания
-- Дедлайны
-- Приоритеты
-- Ответственных
-
-## 🛠️ Устранение неполадок:
-
-### Проблема: Задачи не создаются
-- Проверьте, что бот является администратором группы
-- Убедитесь, что ID списка ClickUp правильный
-- Проверьте логи: `cat /home/ubuntu/telegram_clickup_integration/logs/processing_log_*.md`
-- Убедитесь, что установлен токен (`CLICKUP_TOKEN`) и у него есть права на создание задач
-
-### Проблема: Повторно обрабатываются старые сообщения
-- Удалите файл `state.json`, чтобы обработка началась с текущих событий (старые будут проигнорированы фильтром по времени)
-
-### Проблема: Транскрипция неточная
-- Говорите четко и медленно
-- Избегайте фонового шума
-- Используйте русский язык
-
-### Проблема: Задачи создаются с неправильными параметрами
-- Четко указывайте дедлайны ("до пятницы", "завтра", "через неделю")
-- Явно называйте приоритет ("срочно", "высокий приоритет", "низкий приоритет")
-- Называйте имена ответственных полностью
-
-## 📞 Поддержка:
-
-Если возникли проблемы, проверьте:
-1. Логи выполнения в `/home/ubuntu/telegram_clickup_integration/logs/`
-2. Статус автоматизированной задачи
-3. Правильность API ключей и токенов
+*Tip: Set this script up as an hourly cron job on your server!*
 
 ---
 
-**Статус системы:** ✅ Активна и работает  
-**Следующий запуск:** Через 1 час  
-**Версия:** 1.2
+## ⚙️ Configuration Details
+
+<details>
+<summary><strong>Click to expand full config.json explanation</strong></summary>
+
+- `log_retention_days` / `tasks_retention_days`: Auto-cleanup for local logs. Set to `0` to keep forever.
+- `store_transcriptions`: Set `false` for strict privacy (won't save raw text).
+- `clickup_member_cache_hours`: Reduces API calls by caching ClickUp team members locally.
+- `download_max_workers` / `openai_max_workers`: Concurrency limits for faster batch processing.
+- `assignee_map` & `assignee_aliases`: Map spoken names to ClickUp Member IDs. E.g., `"john": [123456]`.
+- `create_clickup_reminders`: Whether to create a push notification in ClickUp `reminder_offset_hours` before the deadline.
+
+</details>
+
+---
+
+## 🧪 Advanced Usage
+
+### 🕵️ Dry Run Mode
+Test the transcription and extraction without actually creating tasks in ClickUp:
+```bash
+python3 process_voice_messages.py --dry-run --limit 2
+```
+
+### 🔄 Emergency Recreate
+If ClickUp was down or you want to recreate tasks from the last processed batch:
+```bash
+python3 create_clickup_tasks.py --force
+```
+
+---
+
+## 📊 Analytics & Reporting
+
+All runs are beautifully documented in markdown logs locally inside the `logs/` directory. If `send_summary_to_telegram` is enabled, your bot will ping the group with a tiny summary:
+
+> 📋 **Telegram → ClickUp**  
+> Сообщений: 3  
+> Создано задач: 5  
+> Ошибок: 0  
+> Время: 12.4 с  
+> Лог: processing_log_20251001_160000.md
+
+---
+
+<div align="center">
+  <i>Created with ❤️ for seamless productivity.</i>
+</div>
