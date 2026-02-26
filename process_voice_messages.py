@@ -1071,32 +1071,40 @@ def extract_tasks_from_text(
 """
     
     def _operation():
-        return client.responses.create(
-            model="gpt-4.1-mini",
-            input=prompt,
+        return client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             response_format={
                 "type": "json_schema",
                 "json_schema": {
                     "name": "extracted_tasks",
+                    "strict": True,
                     "schema": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "name": {"type": "string"},
-                                "description": {"type": "string"},
-                                "due_date": {"type": ["string", "null"]},
-                                "priority": {
-                                    "type": ["integer", "null"],
-                                    "minimum": 1,
-                                    "maximum": 4
-                                },
-                                "assignee": {"type": ["string", "null"]}
-                            },
-                            "required": ["name", "description", "due_date", "priority", "assignee"],
-                            "additionalProperties": False
-                        }
+                        "type": "object",
+                        "properties": {
+                            "tasks": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "name": {"type": "string"},
+                                        "description": {"type": "string"},
+                                        "due_date": {"type": ["string", "null"]},
+                                        "priority": {
+                                            "type": ["integer", "null"],
+                                            "minimum": 1,
+                                            "maximum": 4
+                                        },
+                                        "assignee": {"type": ["string", "null"]}
+                                    },
+                                    "required": ["name", "description", "due_date", "priority", "assignee"],
+                                    "additionalProperties": False
+                                }
+                            }
+                        },
+                        "required": ["tasks"],
+                        "additionalProperties": False
                     }
                 }
             },
@@ -1108,30 +1116,17 @@ def extract_tasks_from_text(
         max_attempts=max_attempts,
     )
 
-    # Парсим JSON ответ согласно новому SDK
-    parsed_output = getattr(response, "parsed", None)
-    if parsed_output is not None:
-        tasks = parsed_output
-    else:
-        output_items = getattr(response, "output", []) or []
-        if not output_items or not getattr(output_items[0], "content", None):
-            raise ValueError("GPT не вернул текст с задачами при извлечении")
-
-        content_blocks = output_items[0].content
-        text_blocks = [block for block in content_blocks if getattr(block, "type", "") == "output_text"]
-        if not text_blocks:
-            raise ValueError("GPT вернул ответ без текстового содержимого для задач")
-
-        tasks_json = getattr(text_blocks[0], "text", "").strip()
-        if not tasks_json:
-            raise ValueError("GPT вернул пустой текст при извлечении задач")
-
-        try:
-            tasks = json.loads(tasks_json)
-        except json.JSONDecodeError as json_err:
-            raise ValueError(
-                "Не удалось преобразовать ответ модели в JSON несмотря на требуемый формат"
-            ) from json_err
+    # Парсим JSON ответ согласно SDK v1.x
+    try:
+        content = response.choices[0].message.content
+        if not content:
+            raise ValueError("GPT вернул пустой ответ")
+        
+        parsed_data = json.loads(content)
+        tasks = parsed_data.get("tasks", [])
+    except (AttributeError, IndexError, json.JSONDecodeError) as err:
+        logger.error("Ошибка при разборе ответа от OpenAI: %s", err)
+        raise ValueError(f"Ошибка при разборе ответа от OpenAI: {err}") from err
 
     if not isinstance(tasks, list):
         raise ValueError("Ответ GPT должен быть списком задач")

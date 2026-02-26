@@ -98,7 +98,7 @@ class ProcessIntegrationTests(unittest.TestCase):
                     {
                         "name": "Task from audio",
                         "description": "Do something important",
-                        "due_date": "2025-12-31",
+                        "due_date": "2030-12-31",
                         "priority": 1,
                         "assignee": "Ваня",
                     }
